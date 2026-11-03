@@ -32,8 +32,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
 }) => {
   const { isEmptyData, notifications, setIsCreateNotificationOpen } = useProfile()
   return (
-    <aside className="w-64 bg-white border-r border-slate-200/80 min-h-screen flex flex-col justify-between shrink-0 select-none">
-      <div className="p-4 space-y-4">
+    <aside className="sticky top-0 h-screen w-64 bg-white border-r border-slate-200/80 flex flex-col justify-between shrink-0 select-none z-30">
+      <div className="p-4 space-y-4 overflow-y-auto flex-1">
         {/* Brand Header */}
         <div className="flex items-center gap-2.5 pb-2">
           <BepXinhLogo className="w-10 h-10 shadow-xs" />
@@ -299,7 +299,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       </div>
 
       {/* Bottom Node status card & Logout */}
-      <div className="p-4 border-t border-slate-100 space-y-3">
+      <div className="p-4 border-t border-slate-100 space-y-3 shrink-0 bg-white">
         <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100 text-slate-600 space-y-1.5">
           <div className="flex items-center justify-between text-[11px] font-bold text-slate-800">
             <span className="flex items-center gap-1.5">
