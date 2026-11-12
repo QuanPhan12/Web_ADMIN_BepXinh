@@ -1,28 +1,21 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
-  Download,
-  RefreshCw,
-  FolderPlus,
   PackagePlus,
-  Search,
-  Filter,
-  Columns,
   BookOpen,
-  Network,
-  FlaskConical,
-  HeartPulse,
-  Clock,
   CheckCircle2,
-  AlertTriangle,
   Sliders,
   TrendingDown,
-  Share2,
-  Trash2,
 } from 'lucide-react'
 import { useProfile } from '../../context/ProfileContext'
 import { AddCategoryModal } from '../modals/AddCategoryModal'
 import { AddIngredientModal } from '../modals/AddIngredientModal'
 import { EditMappingModal } from '../modals/EditMappingModal'
+import { catalogsRepository } from '../../repositories/catelogs.repository'
+import type { Category } from '../../models/catalogs/categories.model'
+import { CatalogCategoryTree } from './sections/CatalogCategoryTree'
+import { CatalogNavigation, type CatalogTab } from './sections/CatalogNavigation'
+import { CatalogPageHeader } from './sections/CatalogPageHeader'
+import { CatalogSummaryCards } from './sections/CatalogSummaryCards'
 
 interface MasterIngredient {
   id: string
@@ -62,8 +55,11 @@ interface MasterIngredient {
 export const MasterCatalogView: React.FC = () => {
   const { showToast } = useProfile()
   const [ingredients, setIngredients] = useState<MasterIngredient[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true)
+  const [categoriesError, setCategoriesError] = useState('')
   const [activeIngredientId, setActiveIngredientId] = useState<string>('')
-  const [activeMainTab, setActiveMainTab] = useState<'ingredients' | 'categories' | 'spices' | 'nutrition'>('ingredients')
+  const [activeMainTab, setActiveMainTab] = useState<CatalogTab>('ingredients')
   const [selectedGroup, setSelectedGroup] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -80,6 +76,26 @@ export const MasterCatalogView: React.FC = () => {
   })
   const [isEditMappingOpen, setIsEditMappingOpen] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
+
+  useEffect(() => {
+    let isMounted = true
+
+    catalogsRepository.getAll()
+      .then((result) => {
+        if (isMounted) setCategories(result)
+      })
+      .catch((error: unknown) => {
+        console.error('Error loading categories:', error)
+        if (isMounted) setCategoriesError('Không thể tải danh mục. Vui lòng thử lại sau.')
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingCategories(false)
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   const hasData = ingredients.length > 0
   const activeIngredient = ingredients.find((i) => i.id === activeIngredientId) || (hasData ? ingredients[0] : null)
@@ -149,357 +165,38 @@ export const MasterCatalogView: React.FC = () => {
         }}
       />
 
-      {/* 1. Top Bar / Breadcrumb & Actions */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
-          <span>BẾP XINH ADMIN</span>
-          <span>&rsaquo;</span>
-          <span>DANH MỤC &amp; NGUYÊN LIỆU</span>
-          <span>&rsaquo;</span>
-          <span className="text-[#9c3808]">QUẢN LÝ MASTER CATALOG</span>
-        </div>
+      <CatalogPageHeader
+        hasIngredients={hasData}
+        isSyncing={isSyncing}
+        onClearIngredients={() => {
+          setIngredients([])
+          setActiveIngredientId('')
+          setSelectedIds([])
+          showToast('Đã xóa toàn bộ từ điển danh mục & nguyên liệu, đặt lại là 0!')
+        }}
+        onExport={() => showToast('Đang xuất toàn bộ từ điển Master Catalog (.xlsx)...')}
+        onSync={handleSyncMasterSKU}
+        onAddCategory={() => setIsAddCategoryOpen(true)}
+        onAddIngredient={() => setIsAddIngredientOpen(true)}
+      />
 
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div>
-            <div className="flex flex-wrap items-center gap-2.5">
-              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                Quản lý Danh mục Ẩm thực &amp; Nguyên liệu Chuẩn hóa
-              </h1>
-              <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold flex items-center gap-1.5 shadow-2xs">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                Master Taxonomy v2.5.4 Verified
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 mt-1 max-w-3xl leading-relaxed">
-              Chuẩn hóa cây danh mục món ăn (Taxonomy tree), từ điển nguyên liệu quốc gia, định mức dinh dưỡng và quy tắc ánh xạ SKU bán lẻ tự động.
-            </p>
-          </div>
+      <CatalogSummaryCards
+        hasIngredients={hasData}
+        categoryCount={categories.length}
+        isLoadingCategories={isLoadingCategories}
+      />
 
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            {hasData && (
-              <button
-                type="button"
-                onClick={() => {
-                  setIngredients([])
-                  setActiveIngredientId('')
-                  setSelectedIds([])
-                  showToast('Đã xóa toàn bộ từ điển danh mục & nguyên liệu, đặt lại là 0!')
-                }}
-                className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
-              >
-                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                <span>Xóa dữ liệu (0)</span>
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={() => showToast('Đang xuất toàn bộ từ điển Master Catalog (.xlsx)...')}
-              className="px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5 text-slate-500" />
-              <span>Xuất Data (.xlsx)</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleSyncMasterSKU}
-              disabled={isSyncing}
-              className="px-3.5 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 text-indigo-600 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ Master SKU'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setIsAddCategoryOpen(true)}
-              className="px-4 py-2 rounded-xl bg-[#9c3808] hover:bg-[#832f07] text-white text-xs font-black shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-            >
-              <FolderPlus className="w-3.5 h-3.5" />
-              <span>+ Thêm danh mục món</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setIsAddIngredientOpen(true)}
-              className="px-4 py-2 rounded-xl bg-[#9c3808] hover:bg-[#832f07] text-white text-xs font-black shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-            >
-              <PackagePlus className="w-3.5 h-3.5" />
-              <span>+ Thêm nguyên liệu chuẩn</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. 4 Top KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Tổng nguyên liệu chuẩn hóa */}
-        <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs space-y-3">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
-            <span>TỔNG NGUYÊN LIỆU CHUẨN HÓA</span>
-            <div className="w-8 h-8 rounded-xl bg-orange-50 text-[#9c3808] flex items-center justify-center">
-              <BookOpen className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl sm:text-3xl font-black text-slate-900 font-mono tracking-tight">
-              {hasData ? '1,420' : '0'}
-            </span>
-            <span className="text-xs font-normal text-slate-400">
-              {hasData ? '/ 24,000 SKU' : '/ 0 SKU'}
-            </span>
-          </div>
-          <div className="flex items-center justify-between text-xs pt-1">
-            <span className="text-emerald-600 font-bold flex items-center gap-1 text-[11px]">
-              {hasData ? '+38 món mới tháng này' : '0 món mới tháng này'}
-            </span>
-            <span className="text-slate-500 text-[11px] font-medium">
-              {hasData ? '99.2% Calo' : '0.0% Calo'}
-            </span>
-          </div>
-        </div>
-
-        {/* Card 2: Cây danh mục món ăn */}
-        <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs space-y-3">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
-            <span>CÂY DANH MỤC MÓN ĂN</span>
-            <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-              <Network className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl sm:text-3xl font-black text-slate-900 font-mono tracking-tight">
-              {hasData ? '48' : '0'}
-            </span>
-            <span className="text-xs font-normal text-slate-400">Phân loại</span>
-          </div>
-          <div className="text-[11px] text-slate-500 space-y-0.5 pt-1">
-            <div className="font-semibold text-slate-700">
-              {hasData ? '6 Nhóm gốc: 40 Phân nhánh ẩm thực' : '0 Nhóm gốc: 0 Phân nhánh ẩm thực'}
-            </div>
-            <div className="text-slate-400 truncate">
-              {hasData ? 'Món canh, Kho, Xào, Nướng, Eat Clean...' : 'Chưa có phân loại danh mục'}
-            </div>
-          </div>
-        </div>
-
-        {/* Card 3: Tỷ lệ ánh xạ SKU siêu thị */}
-        <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs space-y-3">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
-            <span>TỶ LỆ ÁNH XẠ SKU SIÊU THỊ</span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <Share2 className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-black text-slate-900 font-mono tracking-tight">
-              {hasData ? '96.8%' : '0.0%'}
-            </span>
-            <span className={`text-xs font-bold ${hasData ? 'text-emerald-600' : 'text-slate-400'}`}>
-              {hasData ? 'Đã khớp' : 'Chưa ánh xạ'}
-            </span>
-          </div>
-          <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
-            <span>{hasData ? '48,020 SKUs liên kết' : '0 SKUs liên kết'}</span>
-            <span className="text-slate-700 font-bold">{hasData ? '5 Chuỗi lớn' : '0 Chuỗi lớn'}</span>
-          </div>
-        </div>
-
-        {/* Card 4: Cảnh báo dị ứng & ATTP */}
-        <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs space-y-3">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
-            <span>CẢNH BÁO DỊ ỨNG &amp; ATTP</span>
-            <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
-              <AlertTriangle className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="flex items-center justify-between">
-            <div className="flex items-baseline gap-1.5">
-              <span className={`text-2xl sm:text-3xl font-black font-mono tracking-tight ${hasData ? 'text-rose-600' : 'text-slate-900'}`}>
-                {hasData ? '12' : '0'}
-              </span>
-              <span className={`text-xs font-bold ${hasData ? 'text-rose-600' : 'text-slate-400'}`}>
-                Nhóm nguy cơ
-              </span>
-            </div>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-              hasData ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-500'
-            }`}>
-              {hasData ? '100% Active' : '0% Active'}
-            </span>
-          </div>
-          <div className={`text-[11px] truncate pt-1 font-medium ${hasData ? 'text-rose-700' : 'text-slate-400'}`}>
-            {hasData ? 'Giáp xác, Đậu phộng, Gluten, Sữa bò' : 'Chưa ghi nhận nhóm nguy cơ nào'}
-          </div>
-        </div>
-      </div>
-
-      {/* 3. Master Tabs Strip (Mode Switcher) */}
-      <div className="bg-white rounded-2xl p-2 border border-slate-200/90 shadow-2xs flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Tab 1 */}
-          <button
-            type="button"
-            onClick={() => setActiveMainTab('ingredients')}
-            className={`px-4 py-2.5 rounded-xl font-black transition-all flex items-center gap-2 cursor-pointer ${
-              activeMainTab === 'ingredients'
-                ? 'bg-[#9c3808] text-white shadow-xs'
-                : 'text-slate-700 hover:bg-slate-50'
-            }`}
-          >
-            <BookOpen className="w-4 h-4" />
-            <span>Từ điển Nguyên liệu Chuẩn (Master Ingredients)</span>
-            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-              activeMainTab === 'ingredients' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
-            }`}>
-              {hasData ? '1,420' : '0'}
-            </span>
-          </button>
-
-          {/* Tab 2 */}
-          <button
-            type="button"
-            onClick={() => {
-              setActiveMainTab('categories')
-              showToast('Xem Cây danh mục món ăn (Recipe Categories)...')
-            }}
-            className={`px-4 py-2.5 rounded-xl font-bold transition-all flex items-center gap-2 cursor-pointer ${
-              activeMainTab === 'categories'
-                ? 'bg-[#9c3808] text-white shadow-xs font-black'
-                : 'text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            <Network className="w-4 h-4 text-slate-400" />
-            <span>Cây Danh mục Món ăn (Recipe Categories)</span>
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 text-slate-700 font-bold">
-              {hasData ? '48' : '0'}
-            </span>
-          </button>
-
-          {/* Tab 3 */}
-          <button
-            type="button"
-            onClick={() => {
-              setActiveMainTab('spices')
-              showToast('Xem Nhóm Gia vị & Nước sốt Nấu ăn...')
-            }}
-            className={`px-4 py-2.5 rounded-xl font-bold transition-all flex items-center gap-2 cursor-pointer ${
-              activeMainTab === 'spices'
-                ? 'bg-[#9c3808] text-white shadow-xs font-black'
-                : 'text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            <FlaskConical className="w-4 h-4 text-slate-400" />
-            <span>Nhóm Gia vị &amp; Nước sốt Nấu ăn</span>
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-100 text-slate-700 font-bold">
-              {hasData ? '165' : '0'}
-            </span>
-          </button>
-
-          {/* Tab 4 */}
-          <button
-            type="button"
-            onClick={() => {
-              setActiveMainTab('nutrition')
-              showToast('Xem Bảng Dinh dưỡng & Calo (USDA / Viện DD VN)...')
-            }}
-            className={`px-4 py-2.5 rounded-xl font-bold transition-all flex items-center gap-2 cursor-pointer ${
-              activeMainTab === 'nutrition'
-                ? 'bg-[#9c3808] text-white shadow-xs font-black'
-                : 'text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            <HeartPulse className="w-4 h-4 text-slate-400" />
-            <span>Bảng Dinh dưỡng &amp; Calo (USDA / Viện DD VN)</span>
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2 text-slate-400 text-xs px-3 py-1 font-medium">
-          <Clock className="w-3.5 h-3.5" />
-          <span>Cập nhật lúc: Hôm nay, 14:32</span>
-        </div>
-      </div>
-
-      {/* 4. Search & Filters Bar */}
-      <div className="space-y-3">
-        <div className="p-3.5 bg-white rounded-2xl border border-slate-200/90 shadow-2xs flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-0">
-            {/* Search Input */}
-            <div className="relative w-full sm:w-80">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Thịt ba chỉ"
-                className="w-full pl-9 pr-12 py-2 bg-slate-50 rounded-xl border border-slate-200 font-medium text-slate-800 text-xs outline-none focus:bg-white focus:border-[#9c3808]"
-              />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-200 text-slate-600">
-                ⌘K
-              </span>
-            </div>
-
-            {/* Advanced Filter Button */}
-            <button
-              type="button"
-              onClick={() => showToast('Mở bộ lọc nâng cao thuộc tính nguyên liệu...')}
-              className="px-3.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 font-bold text-slate-700 flex items-center gap-2 transition-all cursor-pointer"
-            >
-              <Filter className="w-3.5 h-3.5 text-slate-500" />
-              <span>Bộ lọc nâng cao</span>
-              <span className="w-2 h-2 rounded-full bg-[#9c3808]" />
-            </button>
-
-            {/* Customize Columns Button */}
-            <button
-              type="button"
-              onClick={() => showToast('Mở tùy chỉnh hiển thị cột dữ liệu...')}
-              className="px-3.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 font-bold text-slate-700 flex items-center gap-2 transition-all cursor-pointer"
-            >
-              <Columns className="w-3.5 h-3.5 text-slate-500" />
-              <span>Tùy chỉnh cột</span>
-            </button>
-          </div>
-
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setSearchQuery('')}
-              className="text-orange-600 font-bold hover:underline cursor-pointer text-xs"
-            >
-              Xóa tìm kiếm
-            </button>
-          )}
-        </div>
-
-        {/* Sub-category Pills */}
-        <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
-          <span className="text-slate-400 uppercase text-[11px] mr-1">NHÓM:</span>
-          {[
-            { id: 'all', label: `Tất cả (${hasData ? '1,420' : 0})` },
-            { id: 'Thịt & Gia cầm', label: `Thịt & Gia cầm (${hasData ? '182' : 0})` },
-            { id: 'Thủy hải sản', label: `Thủy hải sản (${hasData ? '145' : 0})` },
-            { id: 'Rau củ quả tươi', label: `Rau củ quả tươi (${hasData ? '342' : 0})` },
-            { id: 'Gia vị & Thảo mộc', label: `Gia vị & Thảo mộc (${hasData ? '285' : 0})` },
-            { id: 'Đồ khô & Hạt', label: `Đồ khô & Hạt (${hasData ? '210' : 0})` },
-            { id: 'Sữa & Trứng', label: `Sữa & Trứng (${hasData ? '78' : 0})` },
-          ].map((cat) => (
-            <button
-              key={cat.id}
-              type="button"
-              onClick={() => setSelectedGroup(cat.id)}
-              className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
-                selectedGroup === cat.id
-                  ? 'bg-[#9c3808] text-white shadow-2xs font-black'
-                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              {cat.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <CatalogNavigation
+        activeTab={activeMainTab}
+        onTabChange={setActiveMainTab}
+        hasIngredients={hasData}
+        categoryCount={categories.length}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        selectedGroup={selectedGroup}
+        onGroupChange={setSelectedGroup}
+        onNotify={showToast}
+      />
 
       {/* 5. Main Split View: Left Table + Right Detail & Taxonomy */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
@@ -844,111 +541,13 @@ export const MasterCatalogView: React.FC = () => {
             )}
           </div>
 
-          {/* Panel 2: Popular Recipe Categories (Taxonomy Tree) */}
-          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-4 space-y-3.5 text-xs">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <span className="text-base">🌿</span>
-                <h3 className="font-black text-slate-900 text-sm">Cây Danh mục Món ăn Phổ biến</h3>
-              </div>
-              <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-slate-100 text-slate-600 border border-slate-200">
-                Taxonomy Root
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              Cấu trúc phân loại theo phân cấp logic phục vụ tìm kiếm theo tâm lý học hành vi người nội trợ.
-            </p>
-
-            {/* Tree Nodes */}
-            {hasData ? (
-              <div className="space-y-2 text-xs">
-                {/* Root 1 */}
-                <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-200/80 space-y-2">
-                  <div className="flex items-center justify-between font-extrabold text-slate-800 cursor-pointer">
-                    <div className="flex items-center gap-2">
-                      <span className="text-amber-700">📁</span>
-                      <span>Ẩm thực Cơm gia đình</span>
-                    </div>
-                    <span className="text-[10px] font-black bg-amber-100/80 text-amber-900 px-2 py-0.2 rounded-full">
-                      245 món
-                    </span>
-                  </div>
-
-                  <div className="pl-6 space-y-1.5 text-[11px] text-slate-600 border-l-2 border-amber-200 ml-2">
-                    <div className="flex items-center justify-between py-0.5 hover:text-slate-900 cursor-pointer">
-                      <span>Món kho đậm đà (ba chỉ, Cá, Sườn)</span>
-                      <span className="text-[10px] font-semibold text-slate-400">44 món</span>
-                    </div>
-                    <div className="flex items-center justify-between py-0.5 hover:text-slate-900 cursor-pointer">
-                      <span>Món canh thanh mát &amp; Tiềm hầm</span>
-                      <span className="text-[10px] font-semibold text-slate-400">72 món</span>
-                    </div>
-                    <div className="flex items-center justify-between py-0.5 hover:text-slate-900 cursor-pointer">
-                      <span>Xào nhanh đưa cơm</span>
-                      <span className="text-[10px] font-semibold text-slate-400">85 món</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Root 2 */}
-                <div className="p-2.5 bg-white rounded-xl border border-slate-200 flex items-center justify-between font-bold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors">
-                  <div className="flex items-center gap-2">
-                    <span>🥗</span>
-                    <span>Thực dưỡng &amp; Eat Clean (Keto/Salad)</span>
-                  </div>
-                  <span className="text-[10px] font-black bg-slate-100 text-slate-600 px-2 py-0.2 rounded-full">
-                    128 món
-                  </span>
-                </div>
-
-                {/* Root 3 */}
-                <div className="p-2.5 bg-white rounded-xl border border-slate-200 flex items-center justify-between font-bold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors">
-                  <div className="flex items-center gap-2">
-                    <span>🍲</span>
-                    <span>Lẩu &amp; Tiệc Cuối Tuần</span>
-                  </div>
-                  <span className="text-[10px] font-black bg-slate-100 text-slate-600 px-2 py-0.2 rounded-full">
-                    75 món
-                  </span>
-                </div>
-
-                {/* Root 4 */}
-                <div className="p-2.5 bg-white rounded-xl border border-slate-200 flex items-center justify-between font-bold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors">
-                  <div className="flex items-center gap-2">
-                    <span>🥟</span>
-                    <span>Món cuốn &amp; Bánh truyền thống</span>
-                  </div>
-                  <span className="text-[10px] font-black bg-slate-100 text-slate-600 px-2 py-0.2 rounded-full">
-                    45 món
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <div className="p-6 text-center space-y-2.5 bg-slate-50/60 rounded-xl border border-dashed border-slate-200">
-                <div className="text-2xl">🌱</div>
-                <div className="text-xs font-bold text-slate-700">Cây danh mục ẩm thực chưa có nhánh</div>
-                <p className="text-[11px] text-slate-400">0 phân nhánh đã cấu hình</p>
-                <button
-                  type="button"
-                  onClick={() => setIsAddCategoryOpen(true)}
-                  className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs shadow-2xs inline-flex items-center gap-1 cursor-pointer"
-                >
-                  <FolderPlus className="w-3.5 h-3.5 text-[#9c3808]" />
-                  <span>+ Thêm danh mục món đầu tiên</span>
-                </button>
-              </div>
-            )}
-
-            {/* Bottom Button */}
-            <button
-              type="button"
-              onClick={() => showToast(hasData ? 'Mở toàn bộ 48 phân nhánh Cây danh mục ẩm thực Bếp Xinh...' : 'Cây danh mục ẩm thực hiện chưa có dữ liệu nhánh.')}
-              className="w-full py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <Network className="w-3.5 h-3.5 text-slate-500" />
-              <span>Quản lý Cây Danh mục Chi tiết ({hasData ? '48 nhóm' : '0 nhóm'})</span>
-            </button>
-          </div>
+          <CatalogCategoryTree
+            categories={categories}
+            isLoading={isLoadingCategories}
+            error={categoriesError}
+            onAddCategory={() => setIsAddCategoryOpen(true)}
+            onNotify={showToast}
+          />
         </div>
       </div>
     </div>
