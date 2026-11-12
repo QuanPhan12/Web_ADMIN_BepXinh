@@ -1,11 +1,6 @@
 {
-  "firestore": {
-    "database": "(default)",
-    "location": "asia-southeast1",
-    "rules": "y",
-    "indexes": "y"
-  },
   "hosting": {
+    "target": "admin",
     "public": "dist",
     "ignore": [
       "firebase.json",
@@ -18,9 +13,6 @@
         "destination": "/index.html"
       }
     ]
-  },
-  "auth": {
-    "providers": {}
   }
 }
 

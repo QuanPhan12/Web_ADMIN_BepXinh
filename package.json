@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
+    "test": "node --experimental-strip-types --test tests/admin-domain.test.ts",
+    "test:browser": "node tests/browser-emulator.cjs",
     "preview": "vite preview"
   },
   "dependencies": {
