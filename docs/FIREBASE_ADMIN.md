@@ -48,6 +48,9 @@ Admin không có quyền đọc hội thoại, ảnh chat, nháp, tủ lạnh, y
 riêng của người khác. Portal không có API tạo/xóa tài khoản Auth, thu hồi refresh
 token hay vô hiệu hóa đăng nhập Firebase Auth. `locked` là trạng thái hồ sơ được
 Rules hiện tại dùng để chặn các thao tác dữ liệu; đăng nhập Auth vẫn có thể thành công.
+App Flutter hiện có guard theo dõi trạng thái hồ sơ realtime, chặn router khi locked
+và chỉ mở phiên sau khi server xác nhận active. Người dùng app bản cũ cần cập nhật/
+khởi động lại bản Flutter có guard; deploy rules không tự cập nhật code trên thiết bị.
 
 ## Cấp admin đầu tiên
 
