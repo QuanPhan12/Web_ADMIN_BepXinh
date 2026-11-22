@@ -15,7 +15,7 @@ export function SearchField({ value, onChange, placeholder = 'Tìm trong danh s�
 }
 export function StatusBadge({ status }: { status: RecipeStatus }) { return <span className={`admin-badge ${status}`}>{statusLabels[status] ?? status}</span> }
 export function LoadState({ loading, error, empty, retry }: { loading: boolean; error: string; empty: boolean; retry: () => void }) {
-  if (loading) return <p role="status" className="admin-empty">Đang tải dữ liệu Firebase…</p>
+  if (loading) return <p role="status" className="admin-empty">Đang tải nội dung…</p>
   if (error) return <div className="admin-empty"><Notice error={error}/><Button onClick={retry}>Thử lại</Button></div>
   return empty ? <p className="admin-empty">Chưa có dữ liệu phù hợp.</p> : null
 }

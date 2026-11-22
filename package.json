@@ -5,6 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:web": "vite",
+    "ai:server": "powershell -NoProfile -ExecutionPolicy Bypass -File tool/start-ai-local.ps1 -ServerOnly",
+    "dev:ai": "vite",
+    "dev:ai:demo": "powershell -NoProfile -ExecutionPolicy Bypass -File tool/start-ai-local.ps1 -Demo",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "node --experimental-strip-types --test tests/admin-domain.test.ts",

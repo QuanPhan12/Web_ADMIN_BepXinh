@@ -1,7 +1,7 @@
 // Tự mở Chrome với profile riêng, chỉ seed demo emulator; không dùng tài khoản thật.
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
-const { mkdirSync, writeFileSync } = require('node:fs');
+const { mkdirSync, writeFileSync, readFileSync } = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { encode } = require('../../app_bep_xinh/tool/firebase_cli_client.cjs');
@@ -33,12 +33,14 @@ async function account(role) {
   const recipe = { schemaVersion: 2, id: recipeId, authorId: author.id, author: { id: author.id, name: 'user', handle: `bep_${author.id}` }, status: 'pending', isBanner: false, contentHash: 'a'.repeat(64), catalogVersion: data.version, revisionOf: null, reviewedAt: null, reviewedBy: null, reviewReason: null,
     content: { title: 'SDK Browser Recipe', description: 'Firebase integration', cover: { id: 'cover', name: 'cover.png', url: 'https://res.cloudinary.com/ddqouziau/image/upload/v1/test.png', publicId: 'test' }, preparationMinutes: 5, cookingMinutes: 10, servings: 2, difficulty: 'easy', meals: ['dinner'], categories: ['quick'], storageNotes: '', ingredientGroups: [{ id: 'main', name: 'Main' }], ingredients: [{ id: 'i', ingredientId: null, name: 'Custom', amount: null, unitId: null, note: '', toTaste: true, groupId: 'main' }], steps: [{ id: 's', title: 'Cook', instruction: 'Cook thoroughly.', minutes: null, tip: '', photo: null }] } };
   await post(`${base}:commit`, { writes: [write('catalogs/ingredients', { ...data, contentHash }, ['updatedAt']), write(`recipes/${recipeId}`, recipe, ['submittedAt'])] }, 'owner');
-  const server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', '11500', '--strictPort'], { env: { ...process.env, VITE_USE_EMULATORS: 'true' }, windowsHide: true, stdio: 'ignore' });
-  const chrome = spawn('C:/Program Files/Google/Chrome/Application/chrome.exe', ['--headless', '--no-first-run', '--disable-extensions', '--remote-debugging-port=11502', `--user-data-dir=${path.join(artifacts, `chrome-${Date.now()}`)}`, 'about:blank'], { windowsHide: true, stdio: 'ignore' });
+  await post(`${base}:commit`, { writes: [write(`recipes/${recipeId}/user_reviews/reader`, { uid: 'reader', name: 'Reader', stars: 4, body: 'Review browser fixture', status: 'pending' }, ['updatedAt']), write(`recipes/${recipeId}/user_reviews/reader/reports/reporter`, { reason: 'Report browser fixture' }, ['updatedAt'])] }, 'owner');
+  await post(`${base}:commit`, { writes: ['reader', 'dismiss', 'ui'].map(uid => write(`recipe_reports/${uid}:${recipeId}`, { recipeId, recipeTitle: 'SDK Browser Recipe', reporterId: uid, category: 'unsafe', reason: 'Recipe report fixture', status: 'open', resolution: null, resolutionReason: null, resolvedBy: null, resolvedAt: null }, ['createdAt'])) }, 'owner');
+  const server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', '17500', '--strictPort'], { env: { ...process.env, VITE_USE_EMULATORS: 'true', VITE_AI_API_URL: process.env.AI_SMOKE_API_URL || 'http://127.0.0.1:5001/demo-bepxinh/asia-southeast1/bepXinhAi' }, windowsHide: true, stdio: 'ignore' });
+  const chrome = spawn('C:/Program Files/Google/Chrome/Application/chrome.exe', ['--headless', '--no-first-run', '--disable-extensions', '--remote-debugging-port=17502', `--user-data-dir=${path.join(artifacts, `chrome-${Date.now()}`)}`, 'about:blank'], { windowsHide: true, stdio: 'ignore' });
   let ws;
   try {
     let pages;
-    for (let i = 0; i < 50; i++) { try { await fetch('http://127.0.0.1:11500'); pages = await (await fetch('http://127.0.0.1:11502/json/list')).json(); break; } catch { await delay(200); } }
+    for (let i = 0; i < 50; i++) { try { await fetch('http://127.0.0.1:17500'); pages = await (await fetch('http://127.0.0.1:17502/json/list')).json(); break; } catch { await delay(200); } }
     assert.ok(pages, 'Vite/Chrome startup');
     ws = new WebSocket(pages.find(p => p.type === 'page').webSocketDebuggerUrl);
     await new Promise(r => ws.addEventListener('open', r, { once: true }));
@@ -48,16 +50,138 @@ async function account(role) {
     const evaluate = async expression => { const r = await call('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(JSON.stringify(r.exceptionDetails)); return r.result.value; };
     await call('Runtime.enable'); await call('Network.enable');
     await call('Network.setBlockedURLs', { urls: ['https://identitytoolkit.googleapis.com/*', 'https://securetoken.googleapis.com/*', 'https://firestore.googleapis.com/*'] });
-    await call('Page.navigate', { url: 'http://127.0.0.1:11500' });
+    await call('Page.navigate', { url: 'http://127.0.0.1:17500' });
     for (let i = 0; i < 100; i++) { if (await evaluate('!!document.querySelector("input[type=email]")')) break; await delay(200); }
     assert.ok(await evaluate('!!document.querySelector("input[type=email]")'), 'Login renders');
     const result = await evaluate(`import('/tests/browser-driver.ts').then(m => m.run(${JSON.stringify({ email: admin.email, password: admin.password, recipeId, authorId: author.id })}))`);
     for (let i = 0; i < 100; i++) { if (await evaluate('!!document.querySelector(".admin-sidebar")')) break; await delay(100); }
     assert.ok(await evaluate('!!document.querySelector(".admin-sidebar")'), 'Authenticated admin layout');
+    assert.equal(await evaluate('document.documentElement.dataset.theme'), 'dark', 'Dark by default');
+    await call('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
+    await evaluate(`Array.from(document.querySelectorAll('nav button')).find(b => b.textContent === 'Tổng quan').click()`);
+    for (let i = 0; i < 100; i++) { if (await evaluate('document.querySelectorAll(".dashboard-charts .chart-column").length === 7')) break; await delay(100); }
+    assert.equal(await evaluate('document.querySelectorAll(".dashboard-charts .chart-column").length'), 7, 'Seven real daily aggregates render');
+    assert.ok(await evaluate('!!document.querySelector(".dashboard-donut")'), 'Status distribution renders');
+    assert.ok(await evaluate('!document.querySelector("[role=alert]")'), 'Dashboard queries permitted by rules');
+    for (const [label, count] of [['Hôm nay', 24], ['30 ngày', 30], ['7 ngày', 7]]) {
+      await evaluate(`Array.from(document.querySelectorAll('button')).find(b => b.textContent === ${JSON.stringify(label)}).click()`);
+      for (let i = 0; i < 100; i++) { if (await evaluate(`document.querySelectorAll('.dashboard-charts .chart-column').length === ${count}`)) break; await delay(100); }
+      assert.equal(await evaluate('document.querySelectorAll(".dashboard-charts .chart-column").length'), count, `Real aggregates for ${label}`);
+      assert.ok(await evaluate('!document.querySelector("[role=alert]")'), 'No permission or index error');
+    }
+    await evaluate('document.fonts.ready');
+    for (const width of [1440, 800, 390]) {
+      await call('Emulation.setDeviceMetricsOverride', { width, height: 1000, deviceScaleFactor: 1, mobile: width < 680 });
+      await delay(100);
+      assert.ok(await evaluate('document.documentElement.scrollWidth <= window.innerWidth'), `No dashboard overflow at ${width}`);
+      const dashboardShot = await call('Page.captureScreenshot', { format: 'png' }); writeFileSync(path.join(artifacts, `dashboard-dark-${width}.png`), Buffer.from(dashboardShot.data, 'base64'));
+    }
+    await call('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
+    await evaluate(`(()=>{const el=document.querySelector('select[aria-label="Giao diện"]');el.value='dark';el.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await delay(150);
+    assert.equal(await evaluate('getComputedStyle(document.querySelector(".admin-layout")).backgroundColor'), 'rgb(16, 17, 19)', 'Admin dark palette');
+    await evaluate('document.fonts.ready');
+    const darkShot = await call('Page.captureScreenshot', { format: 'png' }); writeFileSync(path.join(artifacts, 'premium-admin-dark.png'), Buffer.from(darkShot.data, 'base64'));
+    await evaluate(`(()=>{const el=document.querySelector('select[aria-label="Giao diện"]');el.value='light';el.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await delay(150);
+    assert.equal(await evaluate('getComputedStyle(document.querySelector(".admin-layout")).backgroundColor'), 'rgb(250, 249, 247)', 'Admin light palette');
+    assert.equal(await evaluate('localStorage.getItem("bx-admin-theme")'), 'light', 'Theme preference saved');
+    const lightDashboard = await call('Page.captureScreenshot', { format: 'png' }); writeFileSync(path.join(artifacts, 'dashboard-light.png'), Buffer.from(lightDashboard.data, 'base64'));
+    await evaluate(`Array.from(document.querySelectorAll('nav button')).find(b => b.textContent === 'Lịch sử duyệt').click()`);
+    for (let i = 0; i < 100; i++) { if (await evaluate('document.querySelector("tbody")?.textContent.includes("SDK Browser Recipe")')) break; await delay(100); }
+    assert.ok(await evaluate('document.querySelector("thead").textContent.includes("Tên món ăn") && document.querySelector("thead").textContent.includes("Người đăng món")'), 'Audit uses business labels');
+    assert.ok(await evaluate('document.querySelector("tbody").textContent.includes("SDK Browser Recipe")'), 'Audit resolves recipe name');
+    const auditShot = await call('Page.captureScreenshot', { format: 'png' }); writeFileSync(path.join(artifacts, 'customer-audit.png'), Buffer.from(auditShot.data, 'base64'));
+    await evaluate(`Array.from(document.querySelectorAll('nav button')).find(b => b.textContent === 'Cài đặt').click()`);
+    assert.ok(await evaluate('document.body.textContent.includes("Cài đặt quản trị viên") && document.body.textContent.includes("shuichiakaik5@gmail.com")'), 'Admin settings and support contact render');
+    for (let i = 0; i < 100; i++) { if (await evaluate('!!document.querySelector("input[autocomplete=off]")')) break; await delay(100); }
+    assert.ok(await evaluate('!!document.querySelector("input[type=password][autocomplete=off]")'), 'AI key is write-only password input');
+    assert.ok(await evaluate('document.body.textContent.includes("Google Gemini") && document.body.textContent.includes("Tương thích OpenAI")'), 'Both AI protocols available');
+    await evaluate(`Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'Lưu cấu hình').click()`);
+    for (let i = 0; i < 100; i++) { if (await evaluate('!!document.querySelector(".admin-success")')) break; await delay(100); }
+    assert.ok(await evaluate('!!document.querySelector(".admin-success")'), 'Disabled AI configuration saves through authenticated local proxy without provider request');
+    assert.equal(await evaluate('document.querySelector("input[autocomplete=off]").value'), '', 'API key not echoed back');
+    const aiSettingsShot = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true }); writeFileSync(path.join(artifacts, 'ai-settings-light.png'), Buffer.from(aiSettingsShot.data, 'base64'));
+    const settingsShot = await call('Page.captureScreenshot', { format: 'png' }); writeFileSync(path.join(artifacts, 'customer-settings.png'), Buffer.from(settingsShot.data, 'base64'));
+    await evaluate(`Array.from(document.querySelectorAll('nav button')).find(b => b.textContent === 'Tổng quan').click()`);
+    for (let i = 0; i < 100; i++) { if (await evaluate('document.querySelectorAll("tbody tr").length === 7')) break; await delay(100); }
+    assert.equal(await evaluate('document.querySelectorAll("tbody tr").length'), 7, 'AI statistics show seven daily rows from authenticated backend');
+    assert.equal(await evaluate(`document.querySelectorAll('section[aria-label="Thống kê chat AI"] .admin-metrics article').length`), 4, 'AI summary metrics render inside dashboard');
+    assert.ok(await evaluate('!Array.from(document.querySelectorAll("nav button")).some(b => b.textContent === "Thống kê AI")'), 'No separate AI statistics menu');
+    assert.ok(await evaluate('document.body.textContent.includes("Chưa có yêu cầu chat AI")'), 'AI empty state uses actual empty data');
+    for (const theme of ['dark', 'light']) {
+      await evaluate(`(()=>{const el=document.querySelector('select[aria-label="Giao diện"]');el.value=${JSON.stringify(theme)};el.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+      for (const width of [1440, 390]) {
+        await call('Emulation.setDeviceMetricsOverride', { width, height: 1000, deviceScaleFactor: 1, mobile: width < 680 });
+        await delay(100);
+        assert.ok(await evaluate('document.documentElement.scrollWidth <= window.innerWidth'), `AI stats fit ${theme} ${width}`);
+        await evaluate(`document.querySelector('section[aria-label="Thống kê chat AI"]').scrollIntoView()`);
+        const statsShot = await call('Page.captureScreenshot', { format: 'png' }); writeFileSync(path.join(artifacts, `ai-stats-${theme}-${width}.png`), Buffer.from(statsShot.data, 'base64'));
+      }
+    }
+    await call('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false });
     await evaluate(`Array.from(document.querySelectorAll('nav button')).find(b => b.textContent.includes('Banner')).click()`);
     for (let i = 0; i < 100; i++) { if (await evaluate('document.body.textContent.includes("SDK Browser Recipe")')) break; await delay(100); }
     assert.ok(await evaluate('document.body.textContent.includes("SDK Browser Recipe")'), 'Realtime banner displayed');
     const shot = await call('Page.captureScreenshot', { format: 'png' }); writeFileSync(path.join(artifacts, 'banners.png'), Buffer.from(shot.data, 'base64'));
+    await evaluate(`Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'Ẩn bài').click()`);
+    await evaluate(`(()=>{const el=document.querySelector('dialog textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,'UI hide fixture');el.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await delay(100);
+    await evaluate(`Array.from(document.querySelectorAll('dialog button')).find(b => b.textContent === 'Xác nhận ẩn bài').click()`);
+    for (let i = 0; i < 100; i++) { if (await evaluate('!document.querySelector("dialog[open]") && !document.body.textContent.includes("SDK Browser Recipe")')) break; await delay(100); }
+    assert.ok(await evaluate('!document.body.textContent.includes("SDK Browser Recipe")'), 'Hidden recipe removed from banner list');
+    await evaluate(`Array.from(document.querySelectorAll('nav button')).find(b => b.textContent === 'Duyệt công thức').click()`);
+    await evaluate(`Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'Đã ẩn').click()`);
+    for (let i = 0; i < 100; i++) { if (await evaluate('document.body.textContent.includes("UI hide fixture")')) break; await delay(100); }
+    assert.ok(await evaluate('document.body.textContent.includes("UI hide fixture")'), 'Hidden filter shows moderation reason');
+    const visibilityShot = await call('Page.captureScreenshot', { format: 'png' }); writeFileSync(path.join(artifacts, 'recipe-hidden.png'), Buffer.from(visibilityShot.data, 'base64'));
+    await evaluate(`Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'Hiện lại bài').click()`);
+    await evaluate(`Array.from(document.querySelectorAll('dialog button')).find(b => b.textContent === 'Xác nhận hiện lại').click()`);
+    for (let i = 0; i < 100; i++) { if (await evaluate('!document.querySelector("dialog[open]") && !document.body.textContent.includes("SDK Browser Recipe")')) break; await delay(100); }
+    assert.ok(await evaluate('!document.body.textContent.includes("SDK Browser Recipe")'), 'Restored recipe leaves hidden list');
+    await evaluate(`Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'Đã duyệt').click()`);
+    for (let i = 0; i < 100; i++) { if (await evaluate('document.body.textContent.includes("SDK Browser Recipe")')) break; await delay(100); }
+    await evaluate(`Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'Làm banner').click()`);
+    assert.ok(await evaluate('document.querySelector("dialog").textContent.includes("Xem xét món nổi bật")'), 'Banner review dialog opens');
+    assert.ok(await evaluate(`Array.from(document.querySelectorAll('dialog button')).find(b => b.textContent === 'Chọn làm banner').disabled`), 'Banner selection needs review');
+    // Ảnh món fixture chỉ kiểm tra preview/load; phần đánh giá nội dung vẫn do người duyệt xác nhận.
+    const bannerFixture = 'data:image/webp;base64,' + readFileSync(path.resolve('../app_bep_xinh/assets/images/fridge_tofu_tomato.webp')).toString('base64');
+    await evaluate(`document.querySelector('dialog img').src = ${JSON.stringify(bannerFixture)}`);
+    await evaluate(`Array.from(document.querySelectorAll('dialog input[type=checkbox]')).forEach(el => el.click())`);
+    for (let i = 0; i < 100; i++) { if (await evaluate(`!Array.from(document.querySelectorAll('dialog button')).find(b => b.textContent === 'Chọn làm banner').disabled`)) break; await delay(100); }
+    assert.ok(await evaluate(`!Array.from(document.querySelectorAll('dialog button')).find(b => b.textContent === 'Chọn làm banner').disabled`), 'Loaded image and three checks enable banner');
+    const bannerReviewShot = await call('Page.captureScreenshot', { format: 'png' }); writeFileSync(path.join(artifacts, 'banner-review.png'), Buffer.from(bannerReviewShot.data, 'base64'));
+    await evaluate(`Array.from(document.querySelectorAll('dialog button')).find(b => b.textContent === 'Chọn làm banner').click()`);
+    for (let i = 0; i < 100; i++) { if (await evaluate('!document.querySelector("dialog[open]")')) break; await delay(100); }
+    assert.ok(await evaluate(`Array.from(document.querySelectorAll('button')).some(b => b.textContent === 'Gỡ banner')`), 'Banner saved after review');
+    await evaluate(`Array.from(document.querySelectorAll('nav button')).find(b => b.textContent.includes('Duyệt đánh giá')).click()`);
+    for (let i = 0; i < 100; i++) { if (await evaluate('document.body.textContent.includes("SDK Browser Recipe")')) break; await delay(100); }
+    await evaluate(`Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'Xem đánh giá').click()`);
+    await evaluate(`Array.from(document.querySelectorAll('dialog button')).find(b => b.textContent === 'Đã duyệt').click()`);
+    for (let i = 0; i < 100; i++) { if (await evaluate('document.body.textContent.includes("Review browser fixture")')) break; await delay(100); }
+    assert.ok(await evaluate('document.body.textContent.includes("Review browser fixture")'), 'Review UI displays approved review');
+    await evaluate(`Array.from(document.querySelectorAll('dialog button')).find(b => b.textContent === 'Xem báo cáo').click()`);
+    for (let i = 0; i < 100; i++) { if (await evaluate('document.body.textContent.includes("Report browser fixture")')) break; await delay(100); }
+    assert.ok(await evaluate('document.body.textContent.includes("Report browser fixture")'), 'Review reports displayed');
+    const reviewShot = await call('Page.captureScreenshot', { format: 'png' }); writeFileSync(path.join(artifacts, 'user-reviews.png'), Buffer.from(reviewShot.data, 'base64'));
+    await evaluate(`document.querySelector('dialog button[aria-label="Đóng"]').click()`);
+    await evaluate(`Array.from(document.querySelectorAll('nav button')).find(b => b.textContent === 'Báo cáo món').click()`);
+    for (let i = 0; i < 100; i++) { if (await evaluate('document.body.textContent.includes("Recipe report fixture")')) break; await delay(100); }
+    assert.ok(await evaluate('document.body.textContent.includes("Recipe report fixture")'), 'Recipe report queue renders');
+    await evaluate(`Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'Xem công thức').click()`);
+    for (let i = 0; i < 100; i++) { if (await evaluate('!!document.querySelector("dialog[open]")')) break; await delay(100); }
+    assert.ok(await evaluate('document.querySelector("dialog").textContent.includes("SDK Browser Recipe")'), 'Reported recipe can be inspected');
+    await evaluate(`document.querySelector('dialog button[aria-label="Đóng"]').click()`);
+    await evaluate(`Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'Xử lý báo cáo').click()`);
+    await evaluate(`(()=>{const el=document.querySelector('dialog textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,'Report UI resolution');el.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+    await delay(100);
+    await evaluate(`Array.from(document.querySelectorAll('dialog button')).find(b => b.textContent === 'Ẩn bài và xử lý').click()`);
+    for (let i = 0; i < 100; i++) { if (await evaluate('!document.querySelector("dialog[open]") && !document.body.textContent.includes("Recipe report fixture")')) break; await delay(100); }
+    assert.ok(await evaluate('!document.body.textContent.includes("Recipe report fixture")'), 'Handled report leaves open queue');
+    await evaluate(`Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'Đã xử lý').click()`);
+    for (let i = 0; i < 100; i++) { if (await evaluate('document.body.textContent.includes("Report UI resolution")')) break; await delay(100); }
+    assert.ok(await evaluate('document.body.textContent.includes("Report UI resolution")'), 'Resolution appears in history');
+    const reportsShot = await call('Page.captureScreenshot', { format: 'png' }); writeFileSync(path.join(artifacts, 'recipe-reports.png'), Buffer.from(reportsShot.data, 'base64'));
     await evaluate(`Array.from(document.querySelectorAll('nav button')).find(b => b.textContent.includes('Danh mục')).click()`);
     for (let i = 0; i < 100; i++) { if (await evaluate('document.querySelectorAll("tbody tr").length > 200')) break; await delay(100); }
     assert.ok(await evaluate('document.querySelectorAll("tbody tr").length > 200'), 'Live catalog rendered');
@@ -66,6 +190,6 @@ async function account(role) {
     await call('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
     const mobile = await call('Page.captureScreenshot', { format: 'png' }); writeFileSync(path.join(artifacts, 'catalog-mobile.png'), Buffer.from(mobile.data, 'base64'));
     assert.equal(errors.length, 0, `Browser exceptions: ${errors.join(', ')}`);
-    console.log(`PASS: ${result.checks} Firebase SDK checks + 6 portal UI checks; screenshots: node_modules/.cache/admin-smoke`);
+    console.log(`PASS: ${result.checks} Firebase SDK checks + 21 portal UI checks; screenshots: node_modules/.cache/admin-smoke`);
   } finally { ws?.close(); chrome.kill(); server.kill(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -1,6 +1,6 @@
 import type { Catalog, DateValue, Recipe, RecipeStatus } from './models.ts'
 
-export const statusLabels: Record<RecipeStatus, string> = { pending: 'Chờ duyệt', approved: 'Đã duyệt', rejected: 'Từ chối' }
+export const statusLabels: Record<RecipeStatus, string> = { pending: 'Chờ duyệt', approved: 'Đã duyệt', rejected: 'Từ chối', hidden: 'Đã ẩn', deleted: 'Đã xóa' }
 export const searchKey = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').toLowerCase().trim()
 export const formatDate = (value?: DateValue | null) => value?.toDate ? value.toDate().toLocaleString('vi-VN', { timeZone: 'Asia/Bangkok' }) : '—'
 function ensure(condition: unknown, message: string): asserts condition { if (!condition) throw new Error(message) }

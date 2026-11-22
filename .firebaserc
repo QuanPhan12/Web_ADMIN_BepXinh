@@ -1,5 +1,15 @@
 {
   "projects": {
     "default": "bepxinh-b0be7"
-  }
+  },
+  "targets": {
+    "bepxinh-b0be7": {
+      "hosting": {
+        "admin": [
+          "bepxinh-admin"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

@@ -1,5 +1,5 @@
 export type Role = 'user' | 'moderator' | 'admin'
-export type RecipeStatus = 'pending' | 'approved' | 'rejected'
+export type RecipeStatus = 'pending' | 'approved' | 'rejected' | 'hidden' | 'deleted'
 export interface DateValue { toDate(): Date }
 export interface Account {
   id: string; name: string; handle: string; bio: string; role?: Role
@@ -19,11 +19,17 @@ export interface RecipeContent {
   steps: { id: string; title: string; instruction: string; minutes: number | null; tip: string; photo?: RemoteImage | null }[]
 }
 export interface Recipe {
+  remix?: { recipeId: string; title: string; authorId: string; authorName: string; sourceHash: string; changes: string }
   id: string; schemaVersion: number; authorId: string
   author: { id: string; name: string; handle: string }
   content: RecipeContent; contentHash: string; catalogVersion: string
   status: RecipeStatus; isBanner: boolean; submittedAt?: DateValue
   reviewedAt?: DateValue; reviewedBy?: string | null; reviewReason?: string | null; revisionOf?: string | null
+  visibilityEventId?: string; visibilityActor?: string; visibilityRole?: 'author' | 'admin'; visibilityReason?: string | null; visibilityAt?: DateValue
+}
+export interface VisibilityEvent {
+  id: string; actor: string; role: 'author' | 'admin'; reason: string | null
+  fromStatus: RecipeStatus; toStatus: RecipeStatus; createdAt?: DateValue
 }
 export interface Category { id: string; name: string; sortOrder: number }
 export interface Unit { id: string; label: string; type: 'mass' | 'volume' | 'count' | 'kitchen' }
@@ -38,3 +44,10 @@ export interface ReviewEvent {
   id: string; submissionId: string; authorId: string; decision: 'approve' | 'reject'
   reviewer: string; reason: string | null; createdAt?: DateValue
 }
+export type UserReviewStatus = 'pending' | 'approved' | 'hidden'
+export interface UserReview {
+  id: string; uid: string; name: string; stars: number; body: string; status: UserReviewStatus
+  updatedAt: DateValue & { seconds: number; nanoseconds: number }
+}
+export interface RatingSummary { sum: number; count: number }
+export interface UserReviewReport { id: string; reason: string; updatedAt?: DateValue }

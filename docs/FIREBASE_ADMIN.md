@@ -1,5 +1,11 @@
 # Quản trị dữ liệu Firebase Bếp Xinh
 
+Giao diện hiện tại dùng font Be Vietnam Pro, màu cam và surface trung tính; có
+Sáng/Tối/Theo hệ thống trong phiên quản trị. Login theo hệ thống. Kiểm chứng giao
+diện và phạm vi đợt nâng cấp: [bàn giao UI](../../app_bep_xinh/docs/UI_UX_PREMIUM_IMPLEMENTATION.md).
+Đã phát hành UI mới lúc 23:01:31 UTC+7 ngày 16/11/2026, Hosting version
+`0b43bcd6a87c2fdf`; HTML/JS/CSS và bốn font live khớp artifact local.
+
 ## Kết nối và dữ liệu
 
 Portal dùng Firebase Authentication email/password và Firestore của project
@@ -20,12 +26,29 @@ mẫu, đăng nhập giả, thông báo phát sóng local hay giao dịch siêu 
 | Danh mục | `catalogs/ingredients` | Listener; thêm/sửa nguyên liệu, nhóm, đơn vị; transaction phát hành phiên bản |
 | Tài khoản | `users/{uid}` | Listener; sửa `role`, `status`, `lockedAt`, `lockReason`, `updatedAt` |
 | Lịch sử duyệt | `recipe_moderation_events` | Listener, mới nhất trước; không sửa/xóa audit |
+| Duyệt đánh giá | `recipes/{id}/user_reviews/{uid}` + `ratings/summary` | Theo từng công thức; duyệt/ẩn và cập nhật điểm đồng thời |
+| Báo cáo đánh giá | `recipes/{id}/user_reviews/{uid}/reports` | Staff xem lý do báo cáo, có thể ẩn đánh giá |
+| Ẩn/hiện bài | `recipes/{id}` + `visibility_events/{eventId}` | Admin đổi trạng thái và ghi lịch sử trong cùng transaction; gỡ banner |
+| Báo cáo món | `recipe_reports/{uid}:{recipeId}` | Staff đọc; admin ẩn bài và đóng báo cáo cùng transaction, hoặc kết luận không vi phạm |
 
 Tìm kiếm bài/tài khoản áp dụng trong danh sách đã tải; bấm tải thêm để mở rộng phạm vi.
 Danh mục là một document nên tải đủ danh sách. Thông báo duyệt trong app tự dựng từ
 `recipes.status/reviewReason`; portal không tạo collection thông báo mới.
 
 ## Quyền
+
+Mở **Duyệt đánh giá** ở menu hoặc `?view=user-reviews`. Chọn công thức đã xuất bản
+(tải thêm 50 bài/lần hoặc mở trực tiếp bằng ID), rồi chọn Chờ duyệt / Đã duyệt /
+Đã ẩn. Duyệt đưa đánh giá lên app và cộng điểm; ẩn rút điểm nếu trước đó đã duyệt.
+Từ chối dùng trạng thái `hidden`, không xóa đánh giá hay báo cáo. Admin và moderator
+đều được xử lý theo Rules đã phát hành ngày 16/11/2026, không cần thay Rules/index.
+Danh sách đánh giá và báo cáo realtime, tải thêm 50 mục/lần; không quét toàn bộ
+collection group. Transaction kiểm tra timestamp đến nano giây để chặn duyệt nhầm
+nội dung đã sửa và đọc lại aggregate để không ghi đè điểm của người khác.
+
+Lịch sử duyệt hiện tại là lịch sử **công thức**. Browser chưa ghi audit đánh giá:
+`user_review_moderation_events` vẫn chỉ cho IAM ghi; công cụ CLI có audit riêng.
+Portal chỉ thay trạng thái đánh giá và tổng điểm, không giả lập bản ghi lịch sử.
 
 Quyền được kiểm tra bằng Firestore Rules tại database và listener hồ sơ trong portal,
 không chỉ ẩn nút ở giao diện. Tài khoản cần `id == UID`, `status == active` và role hợp lệ.
@@ -40,6 +63,7 @@ và [Firestore transactions](https://firebase.google.com/docs/firestore/manage-d
 | Đọc hồ sơ tác giả theo UID để kiểm tra bài | Chỉ mình | Có | Có |
 | Liệt kê tài khoản | Không | Không | Có |
 | Chọn/gỡ banner | Không | Không | Có |
+| Ẩn bài đã duyệt, hiện lại bài admin đã ẩn | Không | Không | Có |
 | Sửa danh mục | Không | Không | Có |
 | Sửa quyền, khóa/mở tài khoản khác | Không | Không | Có |
 | Tự thay quyền/khóa mình | Không | Không | Không |
@@ -66,6 +90,24 @@ Phiên browser dùng session persistence; không tự ghi password/ID token vào
 
 ## Bảo toàn dữ liệu
 
+- **Báo cáo món** (`?view=recipe-reports`) có các tab Chờ xử lý/Đã xử lý/Không vi
+  phạm, listener realtime, tải 50 mục/lần và tìm kiếm trong dữ liệu đã tải. Admin
+  phải xem công thức và nhập kết quả trước khi quyết định. Ẩn bài và đóng báo cáo
+  là một transaction cùng audit visibility; không vi phạm giữ nguyên món. Kết
+  quả đã đóng không sửa/xóa hay mở lại. Báo cáo không tự ẩn bài theo số lượng.
+  Quyền và schema chi tiết: [báo cáo món](../../app_bep_xinh/docs/RECIPE_REPORTS.md).
+
+- Trong **Duyệt công thức** và **Banner trang chủ**, admin bấm **Ẩn bài**, nhập lý
+  do 1–500 ký tự và xác nhận. Tab **Đã ẩn** có lý do/người ẩn, nút **Hiện lại bài**
+  cho bài do admin ẩn; bài tác giả ẩn có nút **Giữ ẩn bởi admin** để tiếp nhận.
+  Không tự hiện lại bài tác giả đã ẩn/xóa. Tab **Đã xóa** chỉ đọc, không khôi phục.
+- Chủ bài quản lý từ app, có quyền xóa khỏi app bằng `status: deleted`, giữ document
+  và subcollection làm lịch sử; không xóa Cloudinary. Hành động đều gỡ banner và
+  lưu actor/role/lý do/thời gian trong audit bất biến. Nút **Lịch sử ẩn/xóa** xem
+  realtime 50 sự kiện/lần; không sửa lịch sử duyệt ban đầu.
+- Client so sánh status và visibilityEventId đang xem với bản server để chặn hành
+  động cũ; Rules bắt buộc đúng chủ/admin và audit đồng thời, không dựa vào UI.
+
 - Duyệt: đọc lại bài và audit trong transaction. Approve kiểm tra tác giả active và
   toàn bộ nội dung/nguyên liệu/ảnh bằng validator; reject bắt buộc lý do 1–500 ký tự.
 - Rules bắt buộc quyết định và audit cùng commit, đúng UID người duyệt, cùng lý do
@@ -73,6 +115,10 @@ Phiên browser dùng session persistence; không tự ghi password/ID token vào
 - Portal lưu `reviewedBy` và `reviewer` bằng Firebase UID. Công cụ CLI cũ dùng
   `iam:<hash>`; cả hai định dạng cùng tồn tại trên schema hiện có.
 - Banner chỉ dành cho bài approved; Home của app chỉ đọc tối đa 10 banner mới nhất.
+- Bật banner qua portal mở preview ảnh vuông; cần ảnh tải được và ba xác nhận
+  về tên/ảnh/crop. Đây là checklist người duyệt, không phân loại nội dung tự động
+  hay invariant mới ở server. Banner cũ không tự gỡ. Chi tiết:
+  [điều chỉnh Home](../../app_bep_xinh/docs/HOME_REFINEMENT.md).
 - Danh mục giữ nguyên ID đã phát hành, không xóa nguyên liệu/nhóm/đơn vị; không bỏ
   đơn vị đã gắn với nguyên liệu. Thêm/sửa tên, aliases, nhóm và bổ sung đơn vị được hỗ trợ.
 - Mỗi lần lưu tăng `YYYY-MM-DD.vN`, tính SHA-256 payload và ghi server timestamp.
@@ -122,12 +168,54 @@ firebase deploy --only firestore --project bepxinh-b0be7
 
 Sau khi rules mới đã được triển khai, admin mới có quyền thao tác dữ liệu thật.
 Để đưa web lên Hosting, xác nhận Hosting site dành riêng cho admin trước;
-không ghi đè site Flutter đang phục vụ app. `firebase.json` dùng target `admin`
-chưa gắn site, nên không vô tình deploy vào default site. Sau khi tạo site riêng,
-gắn bằng `firebase target:apply hosting admin <site-id>`; triển khai bằng
+không ghi đè site Flutter đang phục vụ app. `firebase.json` dùng target `admin`,
+đã gắn site `bepxinh-admin` trong `.firebaserc`.
+URL production: **https://bepxinh-admin.web.app**. Các domain `bepxinh-admin.web.app`
+và `bepxinh-admin.firebaseapp.com` đã có trong Firebase Auth authorized domains.
+Triển khai bằng
 `firebase deploy --only hosting:admin --project bepxinh-b0be7`. Build phải có
 `VITE_USE_EMULATORS=false` (hoặc không khai báo), rồi deploy đúng site/target.
 Không deploy artifact emulator lên Hosting. Việc thay đổi source không tự chứng minh
 rules hoặc Hosting production đã cập nhật; cần kiểm tra bản phát hành thực tế.
 
+### Phát hành Hosting ngày 17/11/2026
+
+Đã build production với `VITE_USE_EMULATORS=false`, endpoint AI HTTPS production
+(không đưa cấu hình `.env.development.local` lên Hosting). Deploy thành công riêng
+`hosting:admin`, site `bepxinh-admin`, bằng tài khoản Firebase đã được chấp thuận.
+Live HTML trả HTTP 200 và JS `/assets/index-CS7uX11D.js` có SHA-256 khớp file local.
+Build và test domain đạt; lint không có lỗi chặn, vẫn có cảnh báo ở source cũ.
+
+Backend AI production `/admin/stats` hiện trả HTTP 404. Đợt này không deploy
+Functions/rules, không bật billing. Vì vậy cấu hình/thống kê AI trên Hosting chưa
+hoạt động dù giao diện đã phát hành; backend dùng dữ liệu thật hiện vẫn chạy local.
+
 Nguồn schema đầy đủ: [README của app](../../app_bep_xinh/README.md).
+
+### Phát hành màn duyệt đánh giá — 16/11/2026
+
+- Đã deploy riêng `hosting:admin`, version `7d802030c5dce1b9`, lúc 18:20:16 UTC+7.
+- HTML và 2 asset JS/CSS production khớp SHA-256 bản build local; không chứa
+  project emulator. Không thay Hosting Flutter hay Rules/index trong đợt này.
+- Build production và 4 domain test đạt. Lint không có lỗi; còn các warning cũ
+  trong prototype. Browser emulator đạt 13 SDK check và 8 UI check, gồm
+  duyệt/ẩn/duyệt lại, điểm tổng, chặn bản cũ, hiển thị đánh giá và báo cáo.
+- Chưa thực hiện thao tác duyệt bằng tài khoản admin thật trên production.
+- Log emulator: `../app_bep_xinh/build/admin_review_browser.log`;
+  ảnh UI và log deploy ở `node_modules/.cache/admin-smoke` (cục bộ).
+
+### Phát hành quyền ẩn bài — 16/11/2026, 18:40 UTC+7
+
+Hosting version `602b65cabcb66e4c` đã phát hành riêng site `bepxinh-admin`.
+HTML và asset live khớp build production. Bộ Chrome/emulator đạt 17 SDK check và
+11 UI check, gồm ẩn/hiện bài, rút banner, chặn thao tác cũ và audit cùng transaction.
+Rules đã phát hành trước admin; app web cũng đã cập nhật. Chi tiết quyền, giới hạn
+xóa bằng tombstone, SHA-256 Rules và các log tại
+[quyền ẩn/xóa bài](../../app_bep_xinh/docs/RECIPE_VISIBILITY.md).
+
+### Phát hành báo cáo món — 16/11/2026, 21:54 UTC+7
+
+Admin version `92c3ed759b8d2dfc` đã phát hành riêng site `bepxinh-admin`;
+HTML/JS/CSS live khớp build. Rules và app web đã phát hành trước đó. Kiểm thử
+Chrome/emulator đạt 21 SDK check và 15 UI check. Các bản phát hành, SHA-256 Rules
+và giới hạn được ghi trong [báo cáo món](../../app_bep_xinh/docs/RECIPE_REPORTS.md).
